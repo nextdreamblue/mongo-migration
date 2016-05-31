@@ -4,10 +4,10 @@ These tool was built to help us migrating billions of documents between
 instances of MongoDB servers.
 
 It accepts two mongo conections.
-* Specify the hosts on `--from` origin and `--to` destinity hosts
-* Specify the database `--from-db`  and `--to-db` database names
-* Specify the collection names from `collection-in` and `collection-out`.
-  Remember the `collection-out` will be created if does not exist. Otherwise will append new data.
+* Specify the database URI on `--from` origin and `--to` destinity
+* Specify the collection names from `--in` and `--out`.
+
+    Remember the `collection-out` will be created if does not exist. Otherwise will append new data.
 
 ```
 ./mongo-migration --collection-in origin --collection-out origin_destination --from localhost --to localhost --from-db rdstation_development --to-db rdstation_development
@@ -56,19 +56,36 @@ It basically keeps a tracking of each record on import considering:
 * Other records will be removed as soon as they are inserted in the destinity collection
 * We log all stuff on the `{{collection-name}}.log`.
 
-# Restarting the process (only test mode)
+# Testing the process (only test mode)
 
-If you're testing and want to see how much it imported:
-
-```javascript
-[db.origin_imported.count(), db.origin_destination.count(),  db.origin_failed.count()] // => [ 12000000, 12000000, 0  ]
-```
-If do you want to restart and keep running in the same localhost for both
-transference, drop the current migration collections to restart:
+Let's setup some data to test. Imagine you're in a localhost. So, let's play on
+a `example` database name with a collection named `test`:
 
 ```javascript
-[db.origin_imported.drop(), db.origin_destination.drop(),  db.origin_failed.drop()] // => [ true, true, false  ]
+use example
+for(i=0;i < 10000;i++){db.test.insert({i: i});}
+// WriteResult({ "nInserted" : 1  })
+db.test.count() // => 10000
 ```
+
+Now, let's transport these 10k collection to another database in another collection:
+
+    ./mongo-migration \ 
+      --from mongodb://localhost:27017/example \
+      --to mongodb://localhost:27017/database_output \
+      --in test --out output
+
+
+Now after verify again on mongo client we should see something like:
+
+```javascript
+use database_output
+db.output.count() // => 10000
+use example
+db.test.count() // => 0
+```
+
+The migration will generate some logs around batches being executed on `test.log` where `test` is the collection name from input.
 
 # Compiling the tool
 
