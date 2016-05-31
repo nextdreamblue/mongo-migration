@@ -7,36 +7,6 @@ It accepts two mongo conections.
 * Specify the database URI on `--from` origin and `--to` destinity
 * Specify the collection names from `--in` and `--out`.
 
-    Remember the `collection-out` will be created if does not exist. Otherwise will append new data.
-
-```
-./mongo-migration --collection-in origin --collection-out origin_destination --from localhost --to localhost --from-db rdstation_development --to-db rdstation_development
-```
-
-Use `--help` to see the options
-```
-~/c/g/s/g/r/mongo-migration ❯❯❯ ./mongo-migration  --help
-NAME:
-   mongo-migration - mongo-migration --from <mongo-host-origin> --collection-in <collection-to-migrate> --to <mongo-target> --collection-out <collection-destinity>
-
-USAGE:
-   mongo-migration [global options] command [command options] [arguments...]
-
-VERSION:
-   0.0.0
-
-COMMANDS:
-GLOBAL OPTIONS:
-   --collection-in value  collection to migrate (default: "timeline-events")
-   --collection-out value collection destination name to migrate (default: "timeline-events-out")
-   --from value     mongo url from origin where is the collection to migrate (default: "localhost")
-   --from-db value    mongo database from origin where is the collection to migrate (default: "rdstation_development")
-   --to value     mongo url destination where will be collection to migrate (default: "localhost")
-   --to-db value    mongo database destination where will be the collection to migrate (default: "rdstation_development")
-   --help, -h     show help
-   --version, -v    print the version
-```
-
 It will only show a black screen on start. So:
 
 * Then press `s` to `start`.
