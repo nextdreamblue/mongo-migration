@@ -1,8 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/codegangsta/cli"
@@ -26,44 +29,35 @@ func main() {
 		cli.StringFlag{
 			Name:        "collection-out",
 			Value:       "timeline-events-out",
-			Usage:       "collection destination name to migrate",
+			Usage:       "collection destination name to be migrated",
 			Destination: &collectionOut,
 		},
 		cli.StringFlag{
 			Name:        "from",
-			Value:       "localhost",
+			Value:       "mongodb://localhost:27017/example",
 			Usage:       "mongo url from origin where is the collection to migrate",
 			Destination: &fromUrl,
 		},
 		cli.StringFlag{
-			Name:        "from-db",
-			Value:       "rdstation_development",
-			Usage:       "mongo database from origin where is the collection to migrate",
-			Destination: &fromDb,
-		},
-		cli.StringFlag{
 			Name:        "to",
-			Value:       "localhost",
+			Value:       "mongodb://localhost:27017/example2",
 			Usage:       "mongo url destination where will be collection to migrate",
 			Destination: &toUrl,
-		},
-		cli.StringFlag{
-			Name:        "to-db",
-			Value:       "rdstation_development",
-			Usage:       "mongo database destination where will be the collection to migrate",
-			Destination: &toDb,
 		},
 	}
 	app.Action = func(c *cli.Context) {
 
-		fromSession, err := mgo.Dial(fromUrl)
-		toSession, err := mgo.Dial(toUrl)
+		fromSession, err := getSession(fromUrl)
+		toSession, err := getSession(toUrl)
 
 		if err != nil {
+			panic(err)
 		}
 
+		defer fromSession.Close()
 		defer toSession.Close()
 
+		toSession.SetMode(mgo.Monotonic, true)
 		fromSession.SetMode(mgo.Monotonic, true)
 
 		from := InstanceInfo{Session: fromSession, Database: fromDb, CollectionName: collectionIn}
@@ -114,4 +108,30 @@ func main() {
 	}
 
 	app.Run(os.Args)
+}
+func getSession(uri string) (*mgo.Session, error) {
+	uri = strings.TrimSuffix(uri, "?ssl=true")
+
+	tlsConfig := &tls.Config{}
+	tlsConfig.InsecureSkipVerify = true
+
+	dialInfo, err := mgo.ParseURL(uri)
+
+	if err != nil {
+		fmt.Println("Failed to parse URI: ", err)
+		os.Exit(1)
+	}
+
+	dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
+		conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
+		return conn, err
+	}
+
+	session, err := mgo.DialWithInfo(dialInfo)
+	if err != nil {
+		fmt.Println("Failed to connect: ", err)
+		os.Exit(1)
+	}
+
+	return session, err
 }
