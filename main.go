@@ -1,11 +1,8 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
-	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/codegangsta/cli"
@@ -21,15 +18,15 @@ func main() {
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:        "collection-in",
-			Value:       "timeline-events",
-			Usage:       "collection to migrate",
+			Name:        "in",
+			Value:       "input",
+			Usage:       "collection input to migrate",
 			Destination: &collectionIn,
 		},
 		cli.StringFlag{
-			Name:        "collection-out",
-			Value:       "timeline-events-out",
-			Usage:       "collection destination name to be migrated",
+			Name:        "out",
+			Value:       "output",
+			Usage:       "collection output name to be migrated",
 			Destination: &collectionOut,
 		},
 		cli.StringFlag{
@@ -47,15 +44,22 @@ func main() {
 	}
 	app.Action = func(c *cli.Context) {
 
+		fmt.Println("get session from url: ", fromUrl)
 		fromSession, err := getSession(fromUrl)
+		if err != nil {
+			fmt.Println("ops!: ", err)
+			panic(err)
+		}
+		fmt.Println("get session to url: ", toUrl)
 		toSession, err := getSession(toUrl)
 
 		if err != nil {
+			fmt.Println("ops!: ", err)
 			panic(err)
 		}
+		fmt.Println("o")
 
 		defer fromSession.Close()
-		defer toSession.Close()
 
 		toSession.SetMode(mgo.Monotonic, true)
 		fromSession.SetMode(mgo.Monotonic, true)
@@ -71,6 +75,7 @@ func main() {
 
 		strs := []string{
 			"[q] [quit](fg-red)",
+			"[d] [debug](switch to log in debug mode)",
 			"[s] [start](fg-white,bg-green)"}
 
 		ls := termui.NewList()
@@ -110,21 +115,12 @@ func main() {
 	app.Run(os.Args)
 }
 func getSession(uri string) (*mgo.Session, error) {
-	uri = strings.TrimSuffix(uri, "?ssl=true")
-
-	tlsConfig := &tls.Config{}
-	tlsConfig.InsecureSkipVerify = true
 
 	dialInfo, err := mgo.ParseURL(uri)
 
 	if err != nil {
-		fmt.Println("Failed to parse URI: ", err)
+		fmt.Println("Failed to parse URI: ", uri, err)
 		os.Exit(1)
-	}
-
-	dialInfo.DialServer = func(addr *mgo.ServerAddr) (net.Conn, error) {
-		conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
-		return conn, err
 	}
 
 	session, err := mgo.DialWithInfo(dialInfo)
