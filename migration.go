@@ -26,14 +26,15 @@ type HandleMigration struct {
 }
 
 type Migration struct {
-	Started                  time.Time
-	RemoteCollection         *mgo.Collection
-	LocalCollection          *mgo.Collection
-	Total                    int
-	Missing                  int
-	Throughtput              *termui.LineChart
-	Percentage               *termui.Gauge
-	InsertRemoteRemoveOrigin chan []interface{}
+	Started          time.Time
+	RemoteCollection *mgo.Collection
+	LocalCollection  *mgo.Collection
+	Total            int
+	Missing          int
+	Throughtput      *termui.LineChart
+	Percentage       *termui.Gauge
+	InsertRemote     chan []interface{}
+	RemoveOrigin     chan interface{}
 }
 
 func (log LogDocs) SuccessfulImport(id string) {
@@ -82,6 +83,7 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 		lineChartWithLabel("Imports per minute"),
 		gaugeWithLabel("Migration Status"),
 		make(chan []interface{}),
+		make(chan interface{}),
 	}
 
 	f, errFile := os.OpenFile(LocalInstance.CollectionName+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -110,7 +112,8 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 	var values []interface{} = make([]interface{}, BATCH_SIZE)
 	var i_value = 0
 
-	go migration.keepInsertRemoteRemoveOrigin()
+	go migration.keepInsertingRemote()
+	go migration.keepRemovingOrigin()
 	for {
 		var v map[string]interface{}
 		iter.Next(&v)
@@ -131,10 +134,10 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 					}
 					compact[j] = value
 				}
-				migration.InsertRemoteRemoveOrigin <- compact
+				migration.InsertRemote <- compact
 				break
 			} else {
-				migration.InsertRemoteRemoveOrigin <- values
+				migration.InsertRemote <- values
 				if HandleMigration.Stop {
 					break
 				}
@@ -198,8 +201,8 @@ func (migration Migration) refreshStatistics(i int) {
 	migration.Percentage.BarColor = termui.ColorGreen
 	termui.Render(termui.Body)
 }
-func (migration Migration) keepInsertRemoteRemoveOrigin() {
-	values := <-migration.InsertRemoteRemoveOrigin
+func (migration Migration) keepInsertingRemote() {
+	values := <-migration.InsertRemote
 	if err := migration.RemoteCollection.Insert(values...); err != nil {
 		info(fmt.Sprintf("Error inserting batch: %v", err))
 		migration.Percentage.BarColor = termui.ColorMagenta
@@ -209,7 +212,7 @@ func (migration Migration) keepInsertRemoteRemoveOrigin() {
 				if err = migration.RemoteCollection.Insert(value); err != nil {
 					info(fmt.Sprintf("Error: %v - inserting value: %v", err, value))
 				} else {
-					migration.RemoveOrigin(value)
+					migration.RemoveOrigin <- value
 				}
 			}
 		}
@@ -220,20 +223,21 @@ func (migration Migration) keepInsertRemoteRemoveOrigin() {
 		termui.Render(termui.Body)
 		for _, value := range values {
 			if value != nil {
-				migration.RemoveOrigin(value)
+				migration.RemoveOrigin <- value
 			}
 		}
 		migration.Percentage.BarColor = termui.ColorGreen
 		termui.Render(termui.Body)
 	}
-	migration.keepInsertRemoteRemoveOrigin()
+	migration.keepInsertingRemote()
 }
 
 func info(message string) {
 	log.Println(fmt.Sprintf("%s: %s", time.Now().Local(), message))
 }
 
-func (migration Migration) RemoveOrigin(value interface{}) {
+func (migration Migration) keepRemovingOrigin() {
+	value := <-migration.RemoveOrigin
 	id := value.(map[string]interface{})["_id"]
 	if id != nil {
 		err := migration.LocalCollection.RemoveId(id)
@@ -241,4 +245,5 @@ func (migration Migration) RemoveOrigin(value interface{}) {
 			log.Println(fmt.Sprintf("Error removing from origin: %v - value: %v", err, value))
 		}
 	}
+	migration.keepRemovingOrigin()
 }
