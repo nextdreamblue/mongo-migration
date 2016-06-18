@@ -26,13 +26,14 @@ type HandleMigration struct {
 }
 
 type Migration struct {
-	Started          time.Time
-	RemoteCollection *mgo.Collection
-	LocalCollection  *mgo.Collection
-	Total            int
-	Missing          int
-	Throughtput      *termui.LineChart
-	Percentage       *termui.Gauge
+	Started                  time.Time
+	RemoteCollection         *mgo.Collection
+	LocalCollection          *mgo.Collection
+	Total                    int
+	Missing                  int
+	Throughtput              *termui.LineChart
+	Percentage               *termui.Gauge
+	InsertRemoteRemoveOrigin chan []interface{}
 }
 
 func (log LogDocs) SuccessfulImport(id string) {
@@ -80,9 +81,8 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 		localCollection, totalToImport, totalToImport,
 		lineChartWithLabel("Imports per minute"),
 		gaugeWithLabel("Migration Status"),
+		make(chan []interface{}),
 	}
-
-	//destinationDB.Login("production-user", "production-password")
 
 	f, errFile := os.OpenFile(LocalInstance.CollectionName+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if errFile != nil {
@@ -104,11 +104,13 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 	termui.Render(termui.Body)
 
 	var i = 0
-	const BATCH_SIZE = 10000
+	const BATCH_SIZE = 100
 	var mode = 0
 
 	var values []interface{} = make([]interface{}, BATCH_SIZE)
 	var i_value = 0
+
+	go migration.keepInsertRemoteRemoveOrigin()
 	for {
 		var v map[string]interface{}
 		iter.Next(&v)
@@ -129,10 +131,10 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 					}
 					compact[j] = value
 				}
-				migration.insertRemoteRemoveOrigin(compact)
+				migration.InsertRemoteRemoveOrigin <- compact
 				break
 			} else {
-				migration.insertRemoteRemoveOrigin(values)
+				migration.InsertRemoteRemoveOrigin <- values
 				if HandleMigration.Stop {
 					break
 				}
@@ -196,7 +198,8 @@ func (migration Migration) refreshStatistics(i int) {
 	migration.Percentage.BarColor = termui.ColorGreen
 	termui.Render(termui.Body)
 }
-func (migration Migration) insertRemoteRemoveOrigin(values []interface{}) {
+func (migration Migration) keepInsertRemoteRemoveOrigin() {
+	values := <-migration.InsertRemoteRemoveOrigin
 	if err := migration.RemoteCollection.Insert(values...); err != nil {
 		info(fmt.Sprintf("Error inserting batch: %v", err))
 		migration.Percentage.BarColor = termui.ColorMagenta
@@ -223,6 +226,7 @@ func (migration Migration) insertRemoteRemoveOrigin(values []interface{}) {
 		migration.Percentage.BarColor = termui.ColorGreen
 		termui.Render(termui.Body)
 	}
+	migration.keepInsertRemoteRemoveOrigin()
 }
 
 func info(message string) {
