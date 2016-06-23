@@ -37,10 +37,6 @@ type Migration struct {
 	RemoveOrigin     chan interface{}
 }
 
-func (log LogDocs) SuccessfulImport(id string) {
-
-}
-
 func lineChartWithLabel(label string) *termui.LineChart {
 	lineChart := termui.NewLineChart()
 	lineChart.BorderLabel = label
@@ -68,11 +64,11 @@ func gaugeWithLabel(label string) *termui.Gauge {
 
 func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo, HandleMigration *HandleMigration) {
 
-	LocalInstance.Session.SetBatch(50000000)
-	LocalInstance.Session.SetPrefetch(0.5)
+	LocalInstance.Session.SetBatch(100000)
+	LocalInstance.Session.SetPrefetch(0.1)
 
-	originDB := LocalInstance.Session.DB(LocalInstance.Database)
-	destinationDB := RemoteInstance.Session.DB(RemoteInstance.Database)
+	originDB := LocalInstance.Session.DB("") // database name is used from DialInfo
+	destinationDB := RemoteInstance.Session.DB("")
 	localCollection := originDB.C(LocalInstance.CollectionName)
 
 	totalToImport, _ := localCollection.Count()
@@ -106,7 +102,7 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 	termui.Render(termui.Body)
 
 	var i = 0
-	const BATCH_SIZE = 100
+	const BATCH_SIZE = 1000
 	var mode = 0
 
 	var values []interface{} = make([]interface{}, BATCH_SIZE)

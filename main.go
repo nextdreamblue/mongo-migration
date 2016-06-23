@@ -14,7 +14,7 @@ func main() {
 	app := cli.NewApp()
 	app.Name = "mongo-migration"
 	app.Usage = "mongo-migration --from <mongo-host-origin> --collection-in <collection-to-migrate> --to <mongo-target> --collection-out <collection-destinity>"
-	var collectionIn, collectionOut, fromDb, toDb, fromUrl, toUrl string
+	var collectionIn, collectionOut, fromUrl, toUrl string
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -64,8 +64,8 @@ func main() {
 		toSession.SetMode(mgo.Monotonic, true)
 		fromSession.SetMode(mgo.Monotonic, true)
 
-		from := InstanceInfo{Session: fromSession, Database: fromDb, CollectionName: collectionIn}
-		to := InstanceInfo{Session: toSession, Database: toDb, CollectionName: collectionOut}
+		from := InstanceInfo{Session: fromSession, CollectionName: collectionIn}
+		to := InstanceInfo{Session: toSession, CollectionName: collectionOut}
 
 		err = termui.Init()
 		if err != nil {
@@ -73,41 +73,12 @@ func main() {
 		}
 		defer termui.Close()
 
-		strs := []string{
-			"[q] [quit](fg-red)",
-			"[d] [debug](switch to log in debug mode)",
-			"[s] [start](fg-white,bg-green)"}
-
-		ls := termui.NewList()
-		ls.Items = strs
-		ls.ItemFgColor = termui.ColorYellow
-		ls.BorderLabel = "Press key to action"
-		ls.Height = 7
-		ls.Width = 25
-		ls.Y = 0
-		termui.Render(ls)
+		termui.Render(keyboardShortcuts())
 		started := false
 
 		handleMigration := HandleMigration{false, false, false}
 
-		termui.Handle("/sys/kbd/q", func(termui.Event) {
-			handleMigration.Stop = true
-			for !handleMigration.Stopped {
-				fmt.Print(".")
-				time.Sleep(1000 * time.Millisecond)
-			}
-			termui.StopLoop()
-		})
-
-		termui.Handle("/sys/kbd/s", func(termui.Event) {
-			if !started {
-				ImportCollection(&from, &to, &handleMigration)
-				started = true
-			}
-		})
-		termui.Handle("/sys/kbd/d", func(termui.Event) {
-			handleMigration.LogMode = !handleMigration.LogMode
-		})
+		setupKeyboardHandle(handleMigration, started, from, to)
 
 		termui.Loop()
 	}
@@ -119,14 +90,14 @@ func getSession(uri string) (*mgo.Session, error) {
 	dialInfo, err := mgo.ParseURL(uri)
 
 	if err != nil {
-		fmt.Println("Failed to parse URI: ", uri, err)
-		os.Exit(1)
+		return nil, err
 	}
+
+	dialInfo.Timeout = 300 * time.Millisecond
 
 	session, err := mgo.DialWithInfo(dialInfo)
 	if err != nil {
-		fmt.Println("Failed to connect: ", err)
-		os.Exit(1)
+		return nil, err
 	}
 
 	return session, err
