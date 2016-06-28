@@ -15,16 +15,6 @@ type InstanceInfo struct {
 	Database       string
 	CollectionName string
 }
-
-type LogDocs struct {
-	node InstanceInfo
-}
-type HandleMigration struct {
-	LogMode bool
-	Stop    bool
-	Stopped bool
-}
-
 type Migration struct {
 	Started          time.Time
 	RemoteCollection *mgo.Collection
@@ -35,6 +25,15 @@ type Migration struct {
 	Percentage       *termui.Gauge
 	InsertRemote     chan []interface{}
 	RemoveOrigin     chan interface{}
+}
+
+type LogDocs struct {
+	node InstanceInfo
+}
+type HandleMigration struct {
+	LogMode bool
+	Stop    bool
+	Stopped bool
 }
 
 func lineChartWithLabel(label string) *termui.LineChart {
@@ -92,8 +91,6 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 
 	log.Println(fmt.Sprintf("\nStarted at %s\n", time.Now().Local()))
 
-	iter := localCollection.Find(nil).Iter()
-
 	termui.Body.AddRows(
 		termui.NewRow(termui.NewCol(6, 0, migration.Percentage),
 			termui.NewCol(6, 0, migration.Throughtput)))
@@ -102,14 +99,17 @@ func ImportCollection(LocalInstance *InstanceInfo, RemoteInstance *InstanceInfo,
 	termui.Render(termui.Body)
 
 	var i = 0
-	const BATCH_SIZE = 1000
 	var mode = 0
 
+	go migration.keepRemovingOrigin()
+	go migration.keepInsertingRemote()
+
+	const BATCH_SIZE = 1000
 	var values []interface{} = make([]interface{}, BATCH_SIZE)
 	var i_value = 0
 
-	go migration.keepInsertingRemote()
-	go migration.keepRemovingOrigin()
+	iter := localCollection.Find(nil).Iter()
+
 	for {
 		var v map[string]interface{}
 		iter.Next(&v)
